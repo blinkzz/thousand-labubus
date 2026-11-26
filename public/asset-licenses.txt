@@ -1,0 +1,17 @@
+3D model: “Labubu: Classic - Collectible 3D Figure” by LaffiTOO (@lookssonya).
+https://sketchfab.com/3d-models/labubu-classic-collectible-3d-figure-2e5ba678496745f7ac466267d4a36548
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+Adapted for this game: simplified and normalized the geometry, remapped and
+rebaked the textures, and added fur patterns, glasses, and a low-detail mesh.
+The model license does not grant rights to underlying character branding or
+trademarks. This is an unofficial fan game, not an official product.
+
+Audio: “Squeaky Toy #1” by Breviceps.
+https://freesound.org/people/Breviceps/sounds/468443/
+Creative Commons CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+The victory cue uses three edited, pitch-shifted notes from this recording.
+
+Favicon artwork supplied for the project; source image:
+https://icoholder.com/files/img/5f7fc1b1cf19758b2c5abdaa5e64fb97.png
+Converted to a multiresolution icon with a rounded white background.

@@ -1,0 +1,20 @@
+{
+  "name": "labubu-lookalike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
+    "test": "tsc --project tsconfig.json && bun test game.test.ts"
+  },
+  "dependencies": {
+    "three": "~0.187.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^2.3.4",
+    "@types/node": "^24.0.0",
+    "@types/three": "~0.187.0",
+    "typescript": "~5.9.3"
+  }
+}

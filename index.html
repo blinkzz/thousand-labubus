@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6eedc">
+  <title>Labubu Lookalike</title>
+</head>
+<body>
+  <main class="game" aria-labelledby="game-title">
+    <h1 id="game-title" class="visually-hidden" data-i18n="gameTitle">Labubu Lookalike</h1>
+    <div id="room-view"></div>
+    <div id="room-loading" role="status">Loading the collection room…</div>
+
+    <section class="reference-card" aria-labelledby="target-title">
+      <h2 id="target-title" class="reference-label" data-i18n="target">Find this toy</h2>
+      <div id="target-toy" aria-hidden="true"></div>
+      <p id="target-description" class="visually-hidden"></p>
+      <dl class="stats">
+        <div>
+          <dt data-i18n="time">Time</dt>
+          <dd id="timer">00:00.0</dd>
+        </div>
+        <div>
+          <dt data-i18n="misses">Misses</dt>
+          <dd id="misses">0</dd>
+        </div>
+        <div>
+          <dt data-i18n="best">Best</dt>
+          <dd id="best">—</dd>
+        </div>
+      </dl>
+      <p id="status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+      <section id="result" class="result" aria-labelledby="result-title" hidden>
+        <h3 id="result-title" data-i18n="won">Twin spotted!</h3>
+        <p><span data-i18n="time">Time</span> <strong id="result-time"></strong><span aria-hidden="true"> · </span> <span data-i18n="misses">Misses</span> <strong id="result-misses"></strong></p>
+        <button id="play-again" type="button" data-i18n="playAgain">Play again</button>
+      </section>
+    </section>
+
+    <div class="game-controls">
+      <div class="difficulty" role="group" aria-label="Difficulty" data-i18n-label="difficulty">
+        <button type="button" data-difficulty="easy" data-i18n="easy" aria-pressed="false" disabled>Easy</button>
+        <button type="button" data-difficulty="normal" data-i18n="normal" aria-pressed="true" disabled>Normal</button>
+        <button type="button" data-difficulty="hard" data-i18n="hard" aria-pressed="false" disabled>Hard</button>
+      </div>
+      <details class="game-options">
+        <summary data-i18n="controls">Controls</summary>
+        <div class="options-panel">
+          <p><span data-i18n="round">Round</span> <span id="round-number">01</span> · <span data-i18n="toyCount">Toys:</span> <span id="count">500</span></p>
+          <div class="language-choice">
+            <label for="language-picker" data-i18n="language">Language</label>
+            <select id="language-picker">
+              <option value="auto" data-i18n="auto">Auto</option>
+              <option value="en" lang="en">English</option>
+              <option value="ru" lang="ru">Русский</option>
+            </select>
+          </div>
+          <p data-i18n="help">Compare the fur color, pattern, ears, and eyes. Drag to orbit, right-drag to pan, and scroll or pinch to zoom. Pick a toy to guess.</p>
+          <p class="touch-hint" data-i18n="touchHelp">Tap Orbit/Pan to change what one-finger dragging does. Drag with two fingers to pan in either mode.</p>
+          <div class="camera-controls" role="group" aria-label="Room camera" data-i18n-label="camera">
+            <button type="button" data-camera="left" data-i18n-label="left" data-i18n-title="left" aria-label="Rotate view left" title="Rotate view left" disabled><span aria-hidden="true">←</span></button>
+            <button type="button" data-camera="right" data-i18n-label="right" data-i18n-title="right" aria-label="Rotate view right" title="Rotate view right" disabled><span aria-hidden="true">→</span></button>
+            <button type="button" data-camera="up" data-i18n-label="up" data-i18n-title="up" aria-label="Raise view" title="Raise view" disabled><span aria-hidden="true">↑</span></button>
+            <button type="button" data-camera="down" data-i18n-label="down" data-i18n-title="down" aria-label="Lower view" title="Lower view" disabled><span aria-hidden="true">↓</span></button>
+            <button type="button" data-camera="in" data-i18n-label="zoomIn" data-i18n-title="zoomIn" aria-label="Zoom in" title="Zoom in" disabled><span aria-hidden="true">+</span></button>
+            <button type="button" data-camera="out" data-i18n-label="zoomOut" data-i18n-title="zoomOut" aria-label="Zoom out" title="Zoom out" disabled><span aria-hidden="true">−</span></button>
+            <button type="button" data-camera="reset" data-i18n="reset" data-i18n-label="resetCamera" aria-label="Reset camera" disabled>Reset</button>
+          </div>
+          <div class="option-actions">
+            <button id="restart" type="button" data-i18n="restart" disabled>New round</button>
+            <button id="sound-toggle" type="button" data-i18n="sound" data-i18n-title="sound" aria-pressed="true" title="Sound effects" disabled>Sound effects</button>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="touch-camera" role="group" aria-label="Quick camera controls" data-i18n-label="quickCamera">
+      <button type="button" data-camera="in" data-i18n-label="zoomIn" aria-label="Zoom in" disabled><span aria-hidden="true">+</span></button>
+      <button type="button" data-camera="out" data-i18n-label="zoomOut" aria-label="Zoom out" disabled><span aria-hidden="true">−</span></button>
+      <button type="button" data-camera="reset" data-i18n="reset" data-i18n-label="resetCamera" aria-label="Reset camera" disabled>Reset</button>
+      <button id="touch-pan" type="button" data-i18n-label="touchMode" aria-label="Pan instead of orbit with one finger" aria-pressed="false" disabled>
+        <span class="touch-mode-orbit" data-i18n="orbit" aria-hidden="true">Orbit</span>
+        <span class="touch-mode-pan" data-i18n="pan" aria-hidden="true">Pan</span>
+      </button>
+    </div>
+
+    <p id="toy-list-hint" class="visually-hidden" data-i18n="keyboardHelp">Use the Up and Down arrows to move between toys, Home or End to jump, and Enter to choose.</p>
+    <ol id="board" class="visually-hidden" aria-label="Toys in the room" data-i18n-label="board" aria-describedby="toy-list-hint" role="list"></ol>
+  </main>
+</body>
+</html>
