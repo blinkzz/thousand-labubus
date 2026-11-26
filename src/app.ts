@@ -266,18 +266,17 @@ class GameController {
     if (!tile) return;
     const outcome = this.round.guess(index);
     if (outcome === 'ignored') return;
+    this.audio.play(outcome === 'wrong' ? 'miss' : 'match');
 
     this.room.markTile(index, outcome);
     tile.classList.add(`is-${outcome}`);
     this.displayTileMark(tile);
     if (outcome === 'match') {
       this.finishRound(tile, event.type === 'click' && event.detail === 0);
-      this.audio.play('match', event.isTrusted);
     } else {
       tile.setAttribute('aria-disabled', 'true');
       this.missesDisplay.textContent = String(this.round.misses);
       this.displayStatus();
-      this.audio.play('miss', event.isTrusted);
     }
   }
 
