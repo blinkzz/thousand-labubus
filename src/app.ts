@@ -39,7 +39,6 @@ class GameController {
     document.querySelector<HTMLButtonElement>(`button[data-difficulty="${mode}"]`)!,
   ] as const);
   private readonly bestTimes = new Map<Difficulty, number>();
-  private readonly audio = new GameAudio();
   private readonly room: RoomView;
 
   private difficulty: Difficulty = 'normal';
@@ -57,7 +56,7 @@ class GameController {
     let choice = readLanguageChoice();
     let locale = resolveLocale(choice);
     let game: GameController | undefined;
-    let loadingText: 'loading' | 'modelError' | 'roomError' = 'loading';
+    let loadingText: 'loading' | 'modelError' | 'audioError' | 'roomError' = 'loading';
     const displayLoading = () => {
       loading.textContent = messages[locale].copy[loadingText];
     };
@@ -79,19 +78,25 @@ class GameController {
     });
     applyLanguage(locale);
 
-    let model: ToyModel;
-    try {
-      model = await ToyModel.load();
-    } catch (error) {
-      console.error('Could not load the Labubu model.', error);
+    const [model, audio] = await Promise.allSettled([ToyModel.load(), GameAudio.load()]);
+    if (model.status === 'rejected') {
+      if (audio.status === 'fulfilled') audio.value.close();
+      console.error('Could not load the Labubu model.', model.reason);
       loadingText = 'modelError';
+      displayLoading();
+      return;
+    }
+    if (audio.status === 'rejected') {
+      console.error('Could not load the sound effects.', audio.reason);
+      loadingText = 'audioError';
       displayLoading();
       return;
     }
 
     try {
-      game = new GameController(model, locale);
+      game = new GameController(model.value, audio.value, locale);
     } catch (error) {
+      audio.value.close();
       console.error('Could not start the 3D room.', error);
       loadingText = 'roomError';
       displayLoading();
@@ -100,8 +105,8 @@ class GameController {
     loading.hidden = true;
   }
 
-  private constructor(model: ToyModel, private locale: Locale) {
-    this.room = new RoomView(document.getElementById('room-view')!, this.targetToy, model, index => this.pickTile(index));
+  private constructor(model: ToyModel, private readonly audio: GameAudio, private locale: Locale) {
+    this.room = new RoomView(document.getElementById('room-view')!, this.targetToy, model, (index, event) => this.pickTile(index, event));
     for (const [mode] of this.difficultyButtons) {
       const best = this.readBest(mode);
       if (best !== undefined) this.bestTimes.set(mode, best);
@@ -144,7 +149,7 @@ class GameController {
     this.board.addEventListener('click', event => {
       const { target } = event;
       const tile = target instanceof Element ? target.closest<HTMLButtonElement>('button[data-index]') : null;
-      if (tile) this.pickTile(Number(tile.dataset.index), event.detail === 0);
+      if (tile) this.pickTile(Number(tile.dataset.index), event);
     });
     this.board.addEventListener('keydown', event => this.navigateTiles(event));
 
@@ -221,6 +226,7 @@ class GameController {
 
     this.result.hidden = true;
     this.room.showRound(this.round.target, this.round.tiles);
+    if (this.roundNumber === 1) this.room.prepare();
     this.targetDescription.textContent = describeToy(this.round.target, this.locale);
 
     this.tabIndex = 0;
@@ -255,7 +261,7 @@ class GameController {
     }, 100);
   }
 
-  private pickTile(index: number, fromKeyboard = false) {
+  private pickTile(index: number, event: MouseEvent) {
     const tile = this.tileButtons[index];
     if (!tile) return;
     const outcome = this.round.guess(index);
@@ -265,13 +271,13 @@ class GameController {
     tile.classList.add(`is-${outcome}`);
     this.displayTileMark(tile);
     if (outcome === 'match') {
-      this.finishRound(tile, fromKeyboard);
-      this.audio.play('match');
+      this.finishRound(tile, event.type === 'click' && event.detail === 0);
+      this.audio.play('match', event.isTrusted);
     } else {
       tile.setAttribute('aria-disabled', 'true');
       this.missesDisplay.textContent = String(this.round.misses);
       this.displayStatus();
-      this.audio.play('miss');
+      this.audio.play('miss', event.isTrusted);
     }
   }
 

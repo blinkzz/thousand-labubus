@@ -1,6 +1,6 @@
 import {
-  ACESFilmicToneMapping, AdditiveBlending, BackSide, Box3, BoxGeometry, BufferGeometry, CanvasTexture,
-  Color, CylinderGeometry, DirectionalLight, DynamicDrawUsage, Float32BufferAttribute, Frustum, Group,
+  ACESFilmicToneMapping, AdditiveBlending, BackSide, Box3, BoxGeometry, CanvasTexture,
+  Color, CylinderGeometry, DirectionalLight, Frustum, Group,
   HemisphereLight, InstancedMesh, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial,
   Matrix4, Object3D, PerspectiveCamera, PlaneGeometry, Raycaster, Scene, SphereGeometry, Spherical,
   SRGBColorSpace, TOUCH, Vector2, Vector3, WebGLRenderer,
@@ -14,7 +14,6 @@ export type CameraAction = 'left' | 'right' | 'up' | 'down' | 'in' | 'out' | 're
 type Mark = 'wrong' | 'match';
 
 const COLUMNS: Readonly<Partial<Record<number, number>>> = { 100: 10, 500: 25, 1000: 40 };
-const MAX_TOYS = 1000;
 const CHUNK_COLUMNS = 8;
 const CHUNK_ROWS = 5;
 const DETAIL_ENTER = 6.5;
@@ -30,6 +29,7 @@ const BOTTOM_TIER = 0.71;
 const SHELF_EDGE = 0.42;
 const ROOM = 1;
 const PREVIEW = 2;
+const FEEDBACK = 4;
 const INITIAL_POLAR = Math.PI / 2 - 0.035;
 const WINDOW_WIDTH = 3.90;
 const WINDOW_HEIGHT = 3.04;
@@ -42,7 +42,11 @@ const SUN_X = 1.20;
 const SUN_Y = 1.25;
 const SUN_Z = -0.66;
 const PREVIEW_ORIGIN = new Vector3();
-const MARK_PAINT: Record<Mark, number> = { wrong: 0xf18a73, match: 0x8ce1b8 };
+const HOVER_Z = 0.33;
+const FOCUS_Z = 0.36;
+const MARK_Z = SHELF_EDGE + 0.016;
+const CORNERS = corners();
+const MARK_SHAPES = { wrong: markShape('wrong'), match: markShape('match') };
 
 type ShelfChunk = {
   bounds: Box3;
@@ -66,12 +70,14 @@ export class RoomView {
   readonly #previewRenderer: WebGLRenderer;
   readonly #controls: OrbitControls;
   readonly #model: ToyModel;
-  readonly #onPick: (index: number) => void;
+  readonly #onPick: (index: number, event: PointerEvent) => void;
 
-  readonly #hover = new Mesh(corners(), flat(0xffdf9d));
-  readonly #focus = new Mesh(this.#hover.geometry, flat(0xfff4e1));
-  readonly #marks = { wrong: makeMarks('wrong'), match: makeMarks('match') };
-  readonly #markerMatrix = new Matrix4();
+  readonly #overlay: HTMLCanvasElement;
+  readonly #overlayContext: CanvasRenderingContext2D;
+  readonly #marks = new Map<number, Mark>();
+  readonly #projectedQuad = new Float64Array(8);
+  readonly #roomSize = new Vector2();
+  readonly #previewSize = new Vector2();
   readonly #raycaster = new Raycaster();
   readonly #pickBox = new Box3();
   readonly #pointer = new Vector2();
@@ -89,30 +95,36 @@ export class RoomView {
   #previewBatch?: Group;
   #press?: { id: number; x: number; y: number; slop: number };
   #hasHoverPoint = false;
+  #hoverIndex: number | null = null;
+  #focusIndex: number | null = null;
   #homeDistance = 1;
   #shelfWidth = 0;
   #shelfHeight = 0;
   #dirty = 0;
   #frame = 0;
 
-  constructor(roomHost: HTMLElement, previewHost: HTMLElement, model: ToyModel, onPick: (index: number) => void) {
+  constructor(roomHost: HTMLElement, previewHost: HTMLElement, model: ToyModel, onPick: (index: number, event: PointerEvent) => void) {
     this.#model = model;
     this.#onPick = onPick;
     this.#renderer = makeRenderer(false);
     this.#previewRenderer = makeRenderer(true);
     const canvas = this.#renderer.domElement;
-    roomHost.append(canvas);
+    this.#overlay = roomHost.ownerDocument.createElement('canvas');
+    this.#overlay.className = 'room-feedback';
+    this.#overlay.setAttribute('aria-hidden', 'true');
+    const context = this.#overlay.getContext('2d');
+    if (!context) throw new Error('Could not create room feedback canvas');
+    this.#overlayContext = context;
+    roomHost.append(canvas, this.#overlay);
     previewHost.append(this.#previewRenderer.domElement);
 
     this.#room.background = new Color(0xcebaa4);
-    this.#room.add(this.#furnishings.root, this.#board, this.#hover, this.#focus, this.#marks.wrong, this.#marks.match);
+    this.#room.add(this.#furnishings.root, this.#board);
     displayLight(this.#room);
     displayLight(this.#preview);
     const sun = new DirectionalLight(0xffe4bf, 1.16);
     sun.position.set(SUN_X, SUN_Y, SUN_Z);
     this.#room.add(sun);
-    this.#hover.visible = this.#focus.visible = false;
-    this.#focus.scale.setScalar(1.045);
 
     const pedestal = new Mesh(
       new CylinderGeometry(0.36, 0.40, 0.065, 36),
@@ -152,6 +164,15 @@ export class RoomView {
     });
     observer.observe(roomHost);
     observer.observe(previewHost);
+    window.addEventListener('resize', () => {
+      this.#resize(ROOM, this.#roomSize.x, this.#roomSize.y);
+      this.#resize(PREVIEW, this.#previewSize.x, this.#previewSize.y);
+    });
+  }
+
+  prepare(): void {
+    if (this.#frame) cancelAnimationFrame(this.#frame);
+    this.#render();
   }
 
   showRound(target: ToyVariant, tiles: readonly ToyVariant[]): void {
@@ -172,33 +193,31 @@ export class RoomView {
     this.#fillShelf(tiles, columns, tiles.length / columns);
     this.#previewBatch = this.#model.createBatch([{ toy: target, position: PREVIEW_ORIGIN }], true);
     this.#preview.add(this.#previewBatch);
-    this.#marks.wrong.count = this.#marks.match.count = 0;
-    this.#focus.visible = false;
+    this.#marks.clear();
+    this.#focusIndex = null;
     this.#press = undefined;
     this.#pointerLeave();
     this.#frameShelf(true);
-    this.#invalidate(ROOM | PREVIEW);
+    this.#invalidate(ROOM | PREVIEW | FEEDBACK);
   }
 
   markTile(index: number, state: Mark): void {
-    // Round.guess only emits the first mark for a tile.
-    const position = this.#positions[index];
-    const mesh = this.#marks[state];
-    this.#markerMatrix.makeTranslation(position.x, position.y, SHELF_EDGE + 0.016);
-    mesh.setMatrixAt(mesh.count++, this.#markerMatrix);
-    mesh.instanceMatrix.needsUpdate = true;
-    this.#invalidate(ROOM);
+    if (!this.#positions[index] || this.#marks.get(index) === state) return;
+    this.#marks.set(index, state);
+    this.#invalidate(FEEDBACK);
   }
 
   focusTile(index: number | null): void {
-    this.#highlight(this.#focus, index, 0.36);
-    if (index === null) return;
-    const position = this.#positions[index];
+    const position = index === null ? undefined : this.#positions[index];
+    const next = position ? index : null;
+    if (this.#focusIndex !== next) {
+      this.#focusIndex = next;
+      this.#invalidate(FEEDBACK);
+    }
     if (!position) return;
-
     const point = this.#focusPoint.copy(position);
     point.y += (HIT_BOTTOM + HIT_TOP) * 0.5;
-    point.z = this.#focus.position.z;
+    point.z = FOCUS_Z;
     point.project(this.#camera);
     if (Math.abs(point.x) <= 0.90 && Math.abs(point.y) <= 0.90 && Math.abs(point.z) <= 1) return;
 
@@ -372,7 +391,7 @@ export class RoomView {
     }
     this.#camera.updateMatrixWorld();
     this.#updateHover();
-    this.#invalidate(ROOM);
+    this.#invalidate(ROOM | FEEDBACK);
   };
 
   #pick(clientX: number, clientY: number): number | null {
@@ -419,21 +438,12 @@ export class RoomView {
     return picked;
   }
 
-  #highlight(frame: Mesh, index: number | null, z: number): void {
-    const position = index === null ? undefined : this.#positions[index];
-    if (position) {
-      if (frame.visible && frame.position.x === position.x && frame.position.y === position.y) return;
-      frame.position.set(position.x, position.y, z);
-    } else if (!frame.visible) {
-      return;
-    }
-    frame.visible = position !== undefined;
-    this.#invalidate(ROOM);
-  }
-
   #updateHover(): void {
     const index = this.#hasHoverPoint ? this.#pick(this.#hoverPoint.x, this.#hoverPoint.y) : null;
-    this.#highlight(this.#hover, index, 0.33);
+    if (this.#hoverIndex !== index) {
+      this.#hoverIndex = index;
+      this.#invalidate(FEEDBACK);
+    }
     const canvas = this.#renderer.domElement;
     const cursor = this.#pointers.size ? 'grabbing' : index === null ? 'grab' : 'pointer';
     if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
@@ -480,7 +490,7 @@ export class RoomView {
       this.#hoverPoint.set(event.clientX, event.clientY);
     }
     this.#updateHover();
-    if (picked !== null) this.#onPick(picked);
+    if (picked !== null) this.#onPick(picked, event);
   };
 
   #pointerCancel = (event: PointerEvent): void => {
@@ -496,12 +506,17 @@ export class RoomView {
 
   #resize(view: number, width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
+    const size = view === ROOM ? this.#roomSize : this.#previewSize;
     const renderer = view === ROOM ? this.#renderer : this.#previewRenderer;
     const ratio = Math.min(window.devicePixelRatio || 1, 1.75);
-    if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
-    renderer.setSize(width, height, false);
+    const ratioChanged = renderer.getPixelRatio() !== ratio;
+    if (!ratioChanged && size.x === width && size.y === height) return;
+    renderer.setDrawingBufferSize(width, height, ratio);
+    size.set(width, height);
     const aspect = width / height;
     if (view === ROOM) {
+      this.#overlay.width = renderer.domElement.width;
+      this.#overlay.height = renderer.domElement.height;
       const changed = aspect !== this.#camera.aspect;
       this.#camera.aspect = aspect;
       if (changed && this.#positions.length) this.#frameShelf(false);
@@ -516,22 +531,79 @@ export class RoomView {
       camera.lookAt(0, 0.47, 0);
       camera.updateProjectionMatrix();
     }
-    this.#invalidate(view);
+    this.#invalidate(view === ROOM ? ROOM | FEEDBACK : PREVIEW);
   }
 
   #invalidate(view: number): void {
     this.#dirty |= view;
-    if (this.#frame) return;
-    this.#frame = requestAnimationFrame(() => {
-      this.#frame = 0;
-      const dirty = this.#dirty;
-      this.#dirty = 0;
-      if (dirty & ROOM) {
-        this.#updateShelfVisibility();
-        this.#renderer.render(this.#room, this.#camera);
+    if (!this.#frame) this.#frame = requestAnimationFrame(this.#render);
+  }
+
+  #render = (): void => {
+    this.#frame = 0;
+    const dirty = this.#dirty;
+    this.#dirty = 0;
+    if (dirty & ROOM) {
+      this.#updateShelfVisibility();
+      this.#renderer.render(this.#room, this.#camera);
+    }
+    if (dirty & PREVIEW) this.#previewRenderer.render(this.#preview, this.#previewCamera);
+    if (dirty & FEEDBACK) this.#renderFeedback();
+  };
+
+  #renderFeedback(): void {
+    const { width, height } = this.#overlay;
+    this.#overlayContext.clearRect(0, 0, width, height);
+    if (this.#hoverIndex !== null) this.#drawFeedback(this.#hoverIndex, HOVER_Z, 1, CORNERS, '#ffdf9d');
+    if (this.#focusIndex !== null) this.#drawFeedback(this.#focusIndex, FOCUS_Z, 1.045, CORNERS, '#fff4e1');
+    for (const [index, mark] of this.#marks) {
+      this.#drawFeedback(index, MARK_Z, 1, MARK_SHAPES[mark], mark === 'wrong' ? '#f18a73' : '#8ce1b8');
+    }
+  }
+
+  #drawFeedback(index: number, z: number, scale: number, shape: readonly number[], color: string): void {
+    if (this.#camera.position.z <= z) return;
+    const { x, y } = this.#positions[index];
+    const m = this.#clipFromWorld.elements;
+    const baseX = m[0] * x + m[4] * y + m[8] * z + m[12];
+    const baseY = m[1] * x + m[5] * y + m[9] * z + m[13];
+    const baseZ = m[2] * x + m[6] * y + m[10] * z + m[14];
+    const baseW = m[3] * x + m[7] * y + m[11] * z + m[15];
+    const halfWidth = this.#overlay.width * 0.5;
+    const halfHeight = this.#overlay.height * 0.5;
+    const context = this.#overlayContext;
+    const points = this.#projectedQuad;
+    let visible = false;
+    context.beginPath();
+    for (let i = 0; i < shape.length; i += 8) {
+      // If all four projected corners are outside the same viewport edge,
+      // skip the quad. The canvas clips polygons that cross a viewport edge.
+      let outside = 15;
+      let j = 0;
+      for (; j < 8; j += 2) {
+        const ox = shape[i + j] * scale;
+        const oy = shape[i + j + 1] * scale;
+        const w = baseW + m[3] * ox + m[7] * oy;
+        const depth = baseZ + m[2] * ox + m[6] * oy;
+        if (!(w > 0 && Math.abs(depth) <= w)) break;
+        const px = (baseX + m[0] * ox + m[4] * oy) / w;
+        const py = (baseY + m[1] * ox + m[5] * oy) / w;
+        outside &= (px < -1 ? 1 : 0) | (px > 1 ? 2 : 0) | (py < -1 ? 4 : 0) | (py > 1 ? 8 : 0);
+        points[j] = (1 + px) * halfWidth;
+        points[j + 1] = (1 - py) * halfHeight;
       }
-      if (dirty & PREVIEW) this.#previewRenderer.render(this.#preview, this.#previewCamera);
-    });
+      if (j !== 8 || outside) continue;
+      context.moveTo(points[0], points[1]);
+      context.lineTo(points[2], points[3]);
+      context.lineTo(points[4], points[5]);
+      context.lineTo(points[6], points[7]);
+      context.closePath();
+      visible = true;
+    }
+    if (visible) {
+      context.fillStyle = color;
+      context.fill();
+    }
   }
 }
 
@@ -799,21 +871,13 @@ function paint(color: number): MeshStandardMaterial {
   return new MeshStandardMaterial({ color, roughness: 0.84 });
 }
 
-function flat(color: number): MeshBasicMaterial {
-  return new MeshBasicMaterial({ color, toneMapped: false });
-}
-
-function planeGeometry(vertices: number[]): BufferGeometry {
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-  return geometry;
-}
+// Each shape is a list of quads in the toy's local XY plane.
 
 function quad(vertices: number[], x1: number, y1: number, x2: number, y2: number): void {
-  vertices.push(x1, y1, 0, x2, y1, 0, x2, y2, 0, x1, y1, 0, x2, y2, 0, x1, y2, 0);
+  vertices.push(x1, y1, x2, y1, x2, y2, x1, y2);
 }
 
-function corners(): BufferGeometry {
+function corners(): number[] {
   const vertices: number[] = [];
   const thickness = 0.039;
   const leg = 0.145;
@@ -825,20 +889,17 @@ function corners(): BufferGeometry {
       quad(vertices, x, bottom ? y + thickness : y + thickness - leg, x + thickness, bottom ? y + leg : y);
     }
   }
-  return planeGeometry(vertices);
+  return vertices;
 }
 
 function stroke(vertices: number[], x1: number, y1: number, x2: number, y2: number): void {
   const length = Math.hypot(x2 - x1, y2 - y1);
   const dx = (y2 - y1) * 0.021 / length;
   const dy = (x1 - x2) * 0.021 / length;
-  vertices.push(
-    x1 + dx, y1 + dy, 0, x2 + dx, y2 + dy, 0, x2 - dx, y2 - dy, 0,
-    x1 + dx, y1 + dy, 0, x2 - dx, y2 - dy, 0, x1 - dx, y1 - dy, 0,
-  );
+  vertices.push(x1 + dx, y1 + dy, x2 + dx, y2 + dy, x2 - dx, y2 - dy, x1 - dx, y1 - dy);
 }
 
-function makeMarks(mark: Mark): InstancedMesh {
+function markShape(mark: Mark): number[] {
   const vertices: number[] = [];
   quad(vertices, -0.39, -0.091, 0.39, -0.036);
   if (mark === 'wrong') {
@@ -848,11 +909,7 @@ function makeMarks(mark: Mark): InstancedMesh {
     stroke(vertices, 0.29, 0.18, 0.36, 0.11);
     stroke(vertices, 0.36, 0.11, 0.50, 0.28);
   }
-  const markers = new InstancedMesh(planeGeometry(vertices), flat(MARK_PAINT[mark]), MAX_TOYS);
-  markers.count = 0;
-  markers.frustumCulled = false;
-  markers.instanceMatrix.setUsage(DynamicDrawUsage);
-  return markers;
+  return vertices;
 }
 
 function canvasTexture(width: number, height: number, draw: (context: CanvasRenderingContext2D) => void): CanvasTexture {
