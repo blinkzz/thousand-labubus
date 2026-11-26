@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "labubu-lookalike",
+      "name": "thousand-labubus",
       "dependencies": {
         "three": "~0.187.0",
       },

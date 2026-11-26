@@ -7,7 +7,7 @@ const LANGUAGE_KEY = 'labubu-lookalike:language';
 
 const english = {
   copy: {
-    gameTitle: 'Labubu Lookalike',
+    gameTitle: 'Thousand Labubus',
     loading: 'Loading the collection room…',
     modelError: 'The toy model could not be loaded. Reload the page to try again.',
     roomError: 'The 3D room could not start. Check that your browser supports WebGL, then reload the page.',
@@ -65,7 +65,7 @@ const english = {
 
 const russian = {
   copy: {
-    gameTitle: 'Лабубу: найди пару',
+    gameTitle: 'Тысяча лабубу',
     loading: 'Загружаем комнату с игрушками…',
     modelError: 'Не удалось загрузить модель игрушки. Обнови страницу, чтобы попробовать снова.',
     roomError: 'Не удалось открыть 3D-комнату. Проверь, поддерживает ли браузер WebGL, и обнови страницу.',
