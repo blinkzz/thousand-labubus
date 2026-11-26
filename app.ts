@@ -1,9 +1,9 @@
-import { GameAudio } from './audio.js';
-import { createRound, DIFFICULTIES, type Round } from './game.js';
-import { describeToy, isLocale, messages, readLanguageChoice, resolveLocale, saveLanguageChoice, translatePage, type Locale } from './locale.js';
-import { RoomView, type CameraAction } from './room.js';
-import { ToyModel } from './toy.js';
-import './styles.css';
+import { GameAudio } from '@/audio';
+import { createRound, DIFFICULTIES, type Round } from '@/game';
+import { describeToy, isLocale, messages, readLanguageChoice, resolveLocale, saveLanguageChoice, translatePage, type Locale } from '@/locale';
+import { RoomView, type CameraAction } from '@/room';
+import { ToyModel } from '@/toy';
+import '@/styles.css';
 
 type Difficulty = keyof typeof DIFFICULTIES;
 

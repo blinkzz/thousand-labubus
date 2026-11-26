@@ -15,7 +15,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { ToyVariant } from './game.js';
+import type { ToyVariant } from '@/game';
 
 const FURS = [
   new Color('#a57861'),

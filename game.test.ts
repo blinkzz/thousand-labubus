@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createRound, DIFFICULTIES, isMatch, type ToyVariant } from './game.js';
+import { createRound, DIFFICULTIES, isMatch, type ToyVariant } from '@/game';
 
 const difficulties = ['easy', 'normal', 'hard'] as const;
 const counts = { easy: 100, normal: 500, hard: 1000 };

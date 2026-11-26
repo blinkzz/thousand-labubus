@@ -5,13 +5,4 @@ export default defineConfig({
   html: { template: './index.html' },
   output: { assetPrefix: 'auto' },
   server: { host: '127.0.0.1' },
-  tools: {
-    rspack(config) {
-      config.resolve ??= {};
-      config.resolve.extensionAlias = {
-        ...config.resolve.extensionAlias,
-        '.js': ['.js', '.ts'],
-      };
-    },
-  },
 });

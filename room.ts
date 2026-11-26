@@ -7,8 +7,8 @@ import {
   type Material,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { ToyVariant } from './game.js';
-import type { ToyModel } from './toy.js';
+import type { ToyVariant } from '@/game';
+import type { ToyModel } from '@/toy';
 
 export type CameraAction = 'left' | 'right' | 'up' | 'down' | 'in' | 'out' | 'reset';
 type Mark = 'wrong' | 'match';

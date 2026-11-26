@@ -1,4 +1,4 @@
-import type { ToyVariant } from './game.js';
+import type { ToyVariant } from '@/game';
 
 export type Locale = 'en' | 'ru';
 type LanguageChoice = Locale | 'auto';
